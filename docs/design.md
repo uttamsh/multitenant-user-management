@@ -9,8 +9,9 @@ method/path registrations across 19 canonical paths. See [Swagger UI](http://loc
 
 `cmd/api` loads configuration, validates JWT settings, opens and pings a pgx pool,
 constructs auth/tenant/user/RBAC services and handlers, and starts `net/http` with
-Gin. Docker Compose runs PostgreSQL only: there is no API Compose service,
-Dockerfile, automatic migration runner, or automatic seed/bootstrap at startup.
+Gin. Docker Compose can run both API and PostgreSQL; host `go run` development
+remains supported. A multi-stage Dockerfile builds static binaries for a non-root
+scratch runtime. There is no automatic migration runner or seed/bootstrap at startup.
 
 The normal flow is:
 
@@ -251,8 +252,9 @@ Migration [003](../migrations/003_authorization_revision.sql) adds
 `tenants.authorization_revision BIGINT NOT NULL DEFAULT 0`, with a nonnegative
 check. It does not change tenant profile `updated_at` or add an HTTP/JWT field.
 Migrations 001/002 remain unchanged. Apply 003 explicitly before deploying the new
-policy; API startup does not migrate. With 003 absent, protected requests fail
-closed with a sanitized database error rather than using stale grants.
+policy; API startup does not migrate. Phase 7 adds a bounded read-only schema
+guard: without the revision column and all seven enabled triggers, startup fails
+closed with a sanitized error rather than accepting requests.
 
 PostgreSQL row triggers advance the revision in the mutation transaction:
 
@@ -320,3 +322,26 @@ changes require restarting API instances/clearing caches. Notifications, TTL and
 Redis are unnecessary for correctness. Tests cover cache bounds/concurrency,
 coherent fills, two independent policies, same-JWT grant/revocation, identity state,
 audit rollback, bootstrap and PostgreSQL failures using isolated test schemas.
+
+## Phase 7 container deployment
+
+The Go 1.26 builder caches module downloads and compilation. The final scratch
+image contains static API/readiness-probe binaries and CA roots, runs as numeric
+UID/GID 65532 and receives configuration only at runtime. Compose enforces a
+read-only root, drops capabilities and prevents privilege escalation. Explicit
+COPY paths and `.dockerignore` exclude `.env`, Git metadata, backups and captures.
+
+The API uses `postgres:5432` inside the existing Compose network via a separate
+private `DOCKER_DATABASE_URL`; local Go keeps its loopback `DATABASE_URL`. The
+PostgreSQL service/volume are unchanged. Host publication is loopback-only, while
+the container binds all its own interfaces. A readiness dependency orders startup;
+a read-only schema check requires migration 003's column and enabled triggers.
+Neither Docker nor the API applies migrations. Image health calls `/ready`; process
+restart and readiness are separate mechanisms. Graceful shutdown uses SIGTERM
+and a configurable stop window. Swagger remains embedded and development-gated.
+
+Images need rebuilding for code/spec/security updates. The maintained Go minor
+image tag is not digest-pinned; release automation should record reviewed digests.
+Docker access is privileged and can inspect runtime environment secrets. TLS,
+production secret management, image scanning/signing and resource/load tuning
+remain deployment responsibilities; no production certification is claimed.

@@ -53,6 +53,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer pool.Close()
+	if err := database.RequireAuthorizationSchema(ctx, pool, cfg.DBTimeout); err != nil {
+		return err
+	}
 	service, err := auth.NewService(auth.NewRepository(pool), tokens, logger)
 	if err != nil {
 		return err

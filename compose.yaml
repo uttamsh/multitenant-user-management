@@ -17,5 +17,40 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    image: multitenant-user-management-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      HTTP_ADDR: "0.0.0.0:8080"
+      DATABASE_URL: ${DOCKER_DATABASE_URL:?Set DOCKER_DATABASE_URL in .env using hostname postgres}
+      APP_ENV: ${APP_ENV:-production}
+      # Unset stays unset, preserving config's APP_ENV-based Swagger default.
+      SWAGGER_ENABLED:
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET privately in .env}
+      JWT_ISSUER: ${JWT_ISSUER:-multitenant-user-management}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
+      DB_TIMEOUT: ${DB_TIMEOUT:-5s}
+      SHUTDOWN_TIMEOUT: ${SHUTDOWN_TIMEOUT:-10s}
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: ${API_STOP_GRACE_PERIOD:-30s}
+    healthcheck:
+      test: ["CMD", "/app/healthcheck"]
+      interval: 10s
+      timeout: 4s
+      start_period: 15s
+      retries: 3
+
 volumes:
   postgres_data:

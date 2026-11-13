@@ -1,12 +1,14 @@
 # Multi-Tenant User Management
 
-Go API using Gin and PostgreSQL through pgxpool. The existing Compose service
-and applied migration are managed separately; API startup does not alter schema.
+Go API using Gin and PostgreSQL through pgxpool. Docker Compose runs the API and
+PostgreSQL, or the API can run locally with Go. Startup verifies authorization
+schema readiness but never alters the database.
 
 ## Submission documentation and prerequisites
 
-- Go 1.26; Docker Engine and Docker Compose v2; curl. PostgreSQL 16 runs in Compose,
-  while the API runs on the host. Swagger UI is embedded; no API image or separate frontend is included.
+- Docker Engine with BuildKit and Docker Compose v2; curl. Go 1.26 is needed only
+  for local development/tests. The multi-stage image uses the Go 1.26 minor line
+  required by go.mod and a non-root scratch runtime. Swagger UI is embedded.
 - [Interactive Swagger UI](http://localhost:8080/swagger/index.html): all 30 application operations / 19 paths
 - [Generated Swagger JSON](docs/swagger/swagger.json) and [YAML](docs/swagger/swagger.yaml)
 - [Nine-table Mermaid ER diagram](docs/erd.md)
@@ -45,9 +47,9 @@ os.chmod(p, 0o600)
 PYCONFIG
 ```
 
-Migrations 001 and 002 are already applied in this workspace. Do not rerun them.
-Phase 6 requires migration 003, which must be approved and applied separately
-before running the new API; see the Phase 6 instructions below. For a
+Migrations 001–003 have been applied to this local development database. Do not
+rerun them. Verify schema state in each new environment; apply missing migrations
+only with operator approval, using the explicit commands below and in Phase 6. For a
 fresh, explicitly authorized database only, apply 001 once before 002:
 
 ```sh
@@ -80,6 +82,111 @@ runner; these SQL files are not idempotent. The development seed/bootstrap comma
 below mutate data and require explicit operator approval. The existing development
 administrator was already bootstrapped during the approved live smoke test; do not
 repeat the initial-only bootstrap in this workspace.
+
+## Run with Docker Compose (Phase 7)
+
+The existing `postgres` service definition, database credential, loopback port and
+`postgres_data` volume are preserved. The new `api` service joins its Compose
+network and waits for PostgreSQL's health check. No startup command recreates the
+schema, seeds accounts or bootstraps roles.
+
+Keep the real JWT secret and database credentials in the ignored `.env`. Configure
+both URLs with the **same existing database credentials**, URL-encoding them:
+
+```dotenv
+# Host Go development:
+DATABASE_URL=postgres://app:REPLACE_ME@127.0.0.1:5432/multitenant?sslmode=disable
+# Container API; localhost inside the container would address the API itself:
+DOCKER_DATABASE_URL=postgres://app:REPLACE_ME@postgres:5432/multitenant?sslmode=disable
+APP_ENV=development
+# Optional explicit override; otherwise Swagger follows APP_ENV:
+# SWAGGER_ENABLED=true
+```
+
+Compose passes an explicit allowlist of configuration variables; `.env` is not
+mounted or copied into the image. The container listens on `0.0.0.0:8080`, while
+Compose publishes **127.0.0.1:8080** by default. The host-only `HTTP_ADDR` value does
+not override this container listener. `API_PORT` can change the published port;
+for example `API_PORT=8081 docker compose up -d --no-recreate` allows coexistence
+with a host API on 8080. Stop the host API before using the default port, or use a
+different port. Do not run two APIs on the same host port.
+
+Before startup, verify migration 003's column and seven enabled revision triggers
+using the Phase 6 verification SQL. On a fresh database, apply 001, then 002, then
+003 **explicitly** with approval. The API now performs a bounded, read-only startup
+check for the non-null BIGINT revision column and all seven enabled triggers,
+in both Docker and local Go mode. Missing/disabled schema fails startup with a
+sanitized actionable error. It never applies a migration automatically.
+
+Configuration/build validation does not start or replace containers:
+
+```sh
+# Quiet validation avoids printing resolved secrets:
+docker compose config --quiet
+docker compose build api
+```
+
+After reviewing the impact on running services and approving any replacement:
+
+```sh
+docker compose up -d
+# To leave every existing container untouched during an initial API addition:
+# docker compose up -d --no-recreate
+docker compose ps
+docker compose logs --tail=100 api
+curl --fail http://localhost:8080/health
+curl --fail http://localhost:8080/ready
+# HTTP 200 when APP_ENV=development, or explicitly SWAGGER_ENABLED=true:
+curl --fail --output /dev/null http://localhost:8080/swagger/index.html
+```
+
+Open [Swagger UI](http://localhost:8080/swagger/index.html). Keep `APP_ENV=production`
+and Swagger disabled for production unless explicitly required. Rebuild the image
+and recreate **only the API** after source or embedded Swagger changes:
+
+```sh
+docker compose build api
+# Requires approval if replacing a running API:
+docker compose up -d --no-deps api
+```
+
+The API uses UID/GID 65532, a read-only root filesystem, no Linux capabilities,
+no-new-privileges, a static Go binary and CA roots. No shell, compiler, `.env`,
+migrations, seed/provision commands or source are included in the final image.
+The health checker calls `/ready` without requiring curl in the image. Docker
+marks failures unhealthy; the restart policy restarts exited processes, not merely
+unhealthy ones. SIGTERM reaches the API directly; the default 30-second stop
+window exceeds the default 10-second graceful shutdown. Keep
+`API_STOP_GRACE_PERIOD` longer than `SHUTDOWN_TIMEOUT` when overriding them.
+
+```sh
+# Stop just the API, leaving PostgreSQL running and its volume attached:
+docker compose stop api
+# Stop both services without removing containers or data:
+docker compose stop
+# Start stopped containers without recreation (environment changes need recreation):
+docker compose start
+```
+
+Never use volume-deletion commands for this project. Compose configuration, image
+builds and container metadata are visible to trusted Docker operators; do not
+publish resolved `docker compose config`, container environment dumps or `.env`.
+The unchanged Compose database credential and seed account remain development-only.
+The base image tracks Go 1.26 patches; production release pipelines should record
+an approved image digest and rebuild for updates. Local Compose uses PostgreSQL
+without TLS on its private network; remote production databases require TLS.
+
+Existing Go tests remain available without starting an API container:
+
+```sh
+go test ./...
+```
+
+The PostgreSQL integration opt-ins still use isolated schemas; enable them only
+against an approved local development test database. Normal `go test ./...` leaves
+them skipped. Image/source contract validation is in
+[scripts/validate-docker.py](scripts/validate-docker.py). See the
+[Phase 7 validation report](docs/phase7-validation.md) for actual results.
 
 ## Run locally
 
@@ -790,7 +897,8 @@ WHERE n.nspname='public' AND NOT t.tgisinternal
 Expect seven enabled triggers and a non-null, nonnegative BIGINT revision. Existing
 tenants start at zero until a tracked change; counters do not change profile
 `updated_at`. After migration, rebuild/restart the API; no JWT replacement is
-required. Leave migration 003 unapplied to development until explicitly approved.
+required. Migration 003 was subsequently approved/applied in this local workspace; check
+other environments before applying it, and never rerun an already applied file.
 
 ```sh
 go mod tidy
