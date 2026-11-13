@@ -49,7 +49,7 @@ presence is evidence of test coverage, not a claim of a current execution.
 | DB-backed authorization wired into all 11 existing management routes | Complete | [application wiring](../cmd/api/main.go), existing registrars, real-policy HTTP tests for all 11 routes |
 | Revalidate current active tenant/member/non-deleted actor with old JWTs | Complete | Policy and scoped transactions; inactive-account/old-JWT tests |
 | 401 missing JWT, 403 insufficient authority, 404 cross-tenant targets | Complete | HTTP helpers, middleware, scope predicates and HTTP integration cases. Authorization precedes target lookup. |
-| No wildcard/admin-name bypass; no unreliable permission cache | Complete | Exact supported catalog, indexed policy queries; 20 explicit bootstrap grants |
+| No wildcard/admin-name bypass; reliable permission cache | Complete | Exact supported catalog; bounded revision-keyed cache; migration 003 triggers, live DB identity/revision checks, uncached transaction checks; Phase 6 tests in internal/rbac/cache*_test.go |
 | Prevent delegation beyond current rights | Complete | Role/permission assignment containment checks; password-change/reactivation target checks; escalation tests |
 | Secure opt-in initial administrator bootstrap with explicit user selection | Complete | [bootstrap transaction](../internal/rbac/bootstrap.go), CLI flags and bootstrap unit/integration tests. Initial-only; no live bootstrap in Phase 5. |
 | Idempotent development-only seed, documented fixture credential | Complete | [seed CLI](../cmd/seed-dev/main.go), [wrapper](../scripts/seed-dev.sh), README. Existing credentials/status are not overwritten. Public test credential must not be used in production. |

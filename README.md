@@ -45,7 +45,9 @@ os.chmod(p, 0o600)
 PYCONFIG
 ```
 
-Both migrations are already applied in this workspace. Do not rerun them. For a
+Migrations 001 and 002 are already applied in this workspace. Do not rerun them.
+Phase 6 requires migration 003, which must be approved and applied separately
+before running the new API; see the Phase 6 instructions below. For a
 fresh, explicitly authorized database only, apply 001 once before 002:
 
 ```sh
@@ -421,7 +423,7 @@ PHASE3_TEST_DATABASE_URL='<local-development-postgres-url>' go test ./internal/u
 ```
 
 Tests create an isolated schema, exclude `public` from its search path, verify the
-current schema, apply both migrations there, and remove only that test schema on
+current schema, apply all migrations there, and remove only that test schema on
 cleanup. They never execute the provisioning CLI against application data.
 Tenant/user/membership repositories, real HTTP handlers with a test-only granting
 policy, transaction rollback, concurrent stale updates and tenant isolation are
@@ -437,10 +439,11 @@ members, including the development seed user, have no management rights until an
 operator explicitly bootstraps or an authorized administrator assigns roles.
 
 Permissions are exact `resource:action` pairs. Access JWTs establish only user and
-tenant identity; roles and permission grants are read from PostgreSQL on every
-protected request. Effective permissions are the distinct union of all roles
+tenant identity. Every protected policy check reads current identity validity and
+authorization revision from PostgreSQL; permission unions may come from the
+revision-keyed Phase 6 cache. Effective permissions are the distinct union of all roles
 assigned to that user in that tenant. There are no wildcard permissions, implicit
-administrator role-name checks, administrator headers, or permission caches.
+administrator role-name checks or administrator headers.
 
 ### Permission matrix
 
@@ -478,7 +481,8 @@ lock, so a request cannot pass an earlier check and then commit a write after a
 permission revocation wins the lock. Reads hold a shared tenant lock until their
 transaction finishes. Existing primary/unique indexes on `tenant_users`,
 `user_roles`, `roles`, `role_permissions` and `permissions` support these joins.
-No permission cache or token renewal is needed for grant invalidation.
+Revision-keyed permission caches observe committed grant changes without token
+renewal. Transaction-level checks continue reading grants directly.
 
 Delegation also checks the actor's current grants inside the transaction:
 assigning a permission requires both `role_permission:assign` and that permission;
@@ -733,3 +737,68 @@ The public development credential/seed account, lack of production rate limiting
 TLS/ingress, MFA/lockout, JTI logout invalidation, token-family replay defense,
 last-admin recovery and audit tamper evidence remain explicit limitations. No
 production-readiness or performance guarantee is claimed.
+
+## Phase 6: revision-based permission cache
+
+The cache uses a bounded 1,024-entry LRU per policy/API instance. Keys include
+tenant, user and authoritative tenant revision; both granted and empty permission
+unions are cached. Every check still verifies current identity and revision from
+primary PostgreSQL. Independent instances need no Redis, TTL or notifications for
+revocation. Cache population reads grants and revision in one statement snapshot.
+See [design and trade-offs](docs/design.md#phase-6-authoritative-permission-caching).
+
+Migration 003 is additive and must be applied **once**, with operator approval,
+after 001/002 and before starting the new API build. It adds the revision counter
+and transactional invalidation triggers; it does not delete records or audit logs.
+DDL requires an owner/migration role and briefly locks the affected tables. Use a
+quiet deployment window. Do not reset revisions or disable the triggers. API
+startup does not migrate; missing 003 causes protected checks to fail closed.
+
+Read-only preflight (003 must be absent before applying it):
+
+```sql
+SELECT column_name, data_type, column_default, is_nullable
+FROM information_schema.columns
+WHERE table_schema='public' AND table_name='tenants'
+  AND column_name='authorization_revision';
+SELECT column_name FROM information_schema.columns
+WHERE table_schema='public' AND table_name='tenant_users'
+  AND column_name IN ('removed_at','updated_at');
+```
+
+After approval, with the existing local Compose migration role:
+
+```sh
+# 003 contains BEGIN/COMMIT; do not wrap it in another transaction.
+docker compose exec -T \
+  -e PGOPTIONS='-c search_path=public -c lock_timeout=5s -c statement_timeout=60s' \
+  postgres psql -X -U app -d multitenant -v ON_ERROR_STOP=1 \
+  -f - < migrations/003_authorization_revision.sql
+```
+
+Read-only verification:
+
+```sql
+SELECT id, authorization_revision FROM public.tenants ORDER BY id;
+SELECT c.relname AS table_name, t.tgname, t.tgenabled
+FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public' AND NOT t.tgisinternal
+  AND t.tgname LIKE '%authorization_revision' ORDER BY c.relname,t.tgname;
+```
+
+Expect seven enabled triggers and a non-null, nonnegative BIGINT revision. Existing
+tenants start at zero until a tracked change; counters do not change profile
+`updated_at`. After migration, rebuild/restart the API; no JWT replacement is
+required. Leave migration 003 unapplied to development until explicitly approved.
+
+```sh
+go mod tidy
+go build ./...
+go test ./...
+go vet ./...
+# Only with an approved local development test DSN: unique schemas are created
+# and removed; public application tables are excluded by the RBAC harness.
+RBAC_TEST_DATABASE_URL='<local-development-postgres-url>' \
+  go test ./internal/rbac -run 'TestPostgres(RBAC|PermissionCache)' -count=1 -v
+```

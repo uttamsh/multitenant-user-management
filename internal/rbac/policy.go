@@ -13,11 +13,43 @@ import (
 type queryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
-type Policy struct{ pool *pgxpool.Pool }
+type Policy struct {
+	source permissionSource
+	cache  *permissionCache
+}
 
-func NewPolicy(pool *pgxpool.Pool) *Policy { return &Policy{pool} }
+// NewPolicy creates an independent, bounded cache. All checks still consult the
+// primary database; CheckTx deliberately bypasses the cache under existing locks.
+func NewPolicy(pool *pgxpool.Pool) *Policy {
+	return &Policy{source: postgresPermissions{pool}, cache: newPermissionCache(1024)}
+}
 func (p *Policy) Check(ctx context.Context, id auth.Identity, action string) error {
-	return check(ctx, p.pool, id, action)
+	if !access.UUID(id.UserID) || !access.UUID(id.TenantID) {
+		return auth.ErrUnauthorized
+	}
+	bit := permissionBit(action)
+	if action != "identity.active" && bit == 0 {
+		return auth.ErrForbidden
+	}
+	revision, err := p.source.revision(ctx, id)
+	if err != nil {
+		return err // Never authorize from a cached result after a database failure.
+	}
+	if action == "identity.active" {
+		return nil
+	}
+	set, hit := p.cache.get(cacheKey(id.TenantID, id.UserID, revision))
+	if !hit {
+		revision, set, err = p.source.snapshot(ctx, id)
+		if err != nil {
+			return err
+		}
+		p.cache.put(cacheKey(id.TenantID, id.UserID, revision), set)
+	}
+	if set&bit == 0 {
+		return auth.ErrForbidden
+	}
+	return nil
 }
 func (p *Policy) CheckTx(ctx context.Context, tx pgx.Tx, id auth.Identity, action string) error {
 	return check(ctx, tx, id, action)

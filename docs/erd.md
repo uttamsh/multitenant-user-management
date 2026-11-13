@@ -1,7 +1,8 @@
 # Database ER diagram
 
 Source of truth: [001_init.sql](../migrations/001_init.sql) and
-[002_membership_lifecycle.sql](../migrations/002_membership_lifecycle.sql).
+[002_membership_lifecycle.sql](../migrations/002_membership_lifecycle.sql) and
+[003_authorization_revision.sql](../migrations/003_authorization_revision.sql).
 There are **nine tables**. The diagram shows actual foreign keys; HTTP target IDs
 and audit `target_id` values do not introduce additional database foreign keys.
 
@@ -23,6 +24,7 @@ erDiagram
         VARCHAR_200 name
         VARCHAR_50 code UK
         VARCHAR_20 status "active or suspended"
+        BIGINT authorization_revision "nonnegative; migration 003"
         TIMESTAMPTZ created_at
         TIMESTAMPTZ updated_at
     }
@@ -124,3 +126,6 @@ The last index overlaps the leading columns of the `user_roles` PK; it is retain
 unchanged. Migration 002 adds only the lifecycle columns/check; no index is added.
 There is no trigram/full-text index for substring user search. No migration has
 been changed by documentation work.
+
+Migration 003 adds the tenant authorization revision and seven invalidation triggers;
+it adds no tables, foreign keys or indexes. See the Phase 6 design for trigger coverage.
