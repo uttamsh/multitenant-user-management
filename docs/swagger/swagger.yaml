@@ -1,0 +1,2230 @@
+basePath: /
+definitions:
+  auth.LoginRequest:
+    description: Wire model for LoginRequest.
+    properties:
+      email:
+        description: Bare email, trimmed; at most 255 UTF-8 bytes. Lookup uses PostgreSQL
+          LOWER on both operands.
+        format: email
+        maxLength: 255
+        minLength: 1
+        type: string
+        x-max-bytes: "255"
+      password:
+        description: 1–72 UTF-8 bytes; existing password, not a password-creation
+          policy.
+        format: password
+        type: string
+        x-max-bytes: "72"
+      tenant_code:
+        description: Trimmed, nonblank, case-sensitive existing tenant code; at most
+          50 UTF-8 bytes.
+        maxLength: 50
+        minLength: 1
+        type: string
+        x-max-bytes: "50"
+    required:
+    - email
+    - password
+    - tenant_code
+    type: object
+  auth.RefreshRequest:
+    description: Wire model for RefreshRequest.
+    properties:
+      refresh_token:
+        description: Opaque token from the latest successful login/refresh. Issued
+          tokens are 43-character unpadded base64url strings. Missing/empty input
+          returns 400; malformed nonempty input or invalid credentials return 401.
+        format: password
+        minLength: 1
+        type: string
+    required:
+    - refresh_token
+    type: object
+  auth.TokenPair:
+    description: Wire model for TokenPair.
+    properties:
+      access_token:
+        description: Short-lived HS256 JWT; do not log.
+        type: string
+      expires_in:
+        description: Access lifetime in whole seconds; default 900.
+        format: int64
+        type: integer
+      refresh_token:
+        description: 256-bit opaque refresh credential; do not log.
+        type: string
+      token_type:
+        enum:
+        - Bearer
+        type: string
+    required:
+    - access_token
+    - expires_in
+    - refresh_token
+    - token_type
+    type: object
+  httpapi.ErrorResponse:
+    description: Sanitized application error; raw driver/panic/credential details
+      are omitted.
+    properties:
+      error:
+        $ref: '#/definitions/middleware.ErrorDetail'
+    required:
+    - error
+    type: object
+  middleware.ErrorDetail:
+    description: Stable code and a human-readable message; authorization precedes
+      target lookup.
+    properties:
+      code:
+        example: invalid_request
+        type: string
+      message:
+        example: Invalid request
+        type: string
+    required:
+    - code
+    - message
+    type: object
+  middleware.ErrorResponse:
+    description: Sanitized application error; raw driver/panic/credential details
+      are omitted.
+    properties:
+      error:
+        $ref: '#/definitions/middleware.ErrorDetail'
+    required:
+    - error
+    type: object
+  rbac.CreateRoleRequest:
+    description: Wire model for RoleCreateRequest.
+    properties:
+      description:
+        description: Trimmed text. Omission on role PATCH clears the description.
+        maxLength: 2000
+        type: string
+      name:
+        description: Trimmed, nonblank, case-sensitive; unique within the current
+          tenant.
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  rbac.DeleteRoleRequest:
+    description: Wire model for RoleDeleteRequest.
+    properties:
+      expected_version:
+        description: Copy the exact version from the latest GET /api/v1/roles/{role_id}.
+          This opaque profile-content digest is not a timestamp or permission-grant
+          version; stale values return 409.
+        type: string
+    required:
+    - expected_version
+    type: object
+  rbac.Permission:
+    description: Wire model for Permission.
+    properties:
+      action:
+        type: string
+      id:
+        format: uuid
+        type: string
+      resource:
+        type: string
+    required:
+    - action
+    - resource
+    type: object
+  rbac.PermissionRequest:
+    description: The pair must be one of the 20 supported catalog permissions, not
+      merely two independently valid strings. No wildcards or custom pairs.
+    properties:
+      action:
+        enum:
+        - read
+        - create
+        - update
+        - delete
+        - status
+        - assign
+        - remove
+        type: string
+      resource:
+        enum:
+        - tenant
+        - user
+        - membership
+        - role
+        - role_permission
+        - user_role
+        - permission
+        - user_permission
+        type: string
+    required:
+    - action
+    - resource
+    type: object
+  rbac.Role:
+    description: Wire model for Role.
+    properties:
+      created_at:
+        format: date-time
+        type: string
+      description:
+        type: string
+      id:
+        format: uuid
+        type: string
+      name:
+        type: string
+      version:
+        description: Opaque profile-content digest from the role response. Not a permission-grant
+          version.
+        type: string
+    required:
+    - created_at
+    - description
+    - id
+    - name
+    - version
+    type: object
+  rbac.RolePage:
+    description: Wire model for RolePage.
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/rbac.Role'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        format: int64
+        type: integer
+    required:
+    - items
+    - page
+    - page_size
+    - total
+    type: object
+  rbac.UpdateRoleRequest:
+    description: Replaces the role profile; omitted description becomes empty.
+    properties:
+      description:
+        description: Trimmed text. Omission on role PATCH clears the description.
+        maxLength: 2000
+        type: string
+      expected_version:
+        description: Copy the exact version from the latest GET /api/v1/roles/{role_id}.
+          This opaque profile-content digest is not a timestamp or permission-grant
+          version; stale values return 409.
+        type: string
+      name:
+        description: Trimmed, nonblank, case-sensitive; unique within the current
+          tenant.
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - expected_version
+    - name
+    type: object
+  server.HealthResponse:
+    description: Liveness after successful application startup.
+    properties:
+      status:
+        enum:
+        - ok
+        type: string
+    required:
+    - status
+    type: object
+  server.ReadyResponse:
+    description: Database readiness; a failed ping returns 503 instead.
+    properties:
+      status:
+        enum:
+        - ready
+        type: string
+    required:
+    - status
+    type: object
+  tenant.StatusRequest:
+    description: Set expected_updated_at to the top-level updated_at from the latest
+      GET /api/v1/tenant. Preserve microsecond precision; example timestamps are illustrative
+      only.
+    properties:
+      expected_updated_at:
+        description: Copy the latest resource timestamp verbatim, preserving all fractional
+          digits and microsecond precision. Never round to milliseconds or use this
+          illustrative example as a real version. Stale versions return 409.
+        example: "2026-01-02T03:04:05.123456Z"
+        format: date-time
+        type: string
+      status:
+        enum:
+        - active
+        - suspended
+        type: string
+    required:
+    - expected_updated_at
+    - status
+    type: object
+  tenant.Tenant:
+    description: Wire model for Tenant.
+    properties:
+      code:
+        type: string
+      created_at:
+        format: date-time
+        type: string
+      id:
+        format: uuid
+        type: string
+      name:
+        type: string
+      status:
+        enum:
+        - active
+        - suspended
+        type: string
+      updated_at:
+        format: date-time
+        type: string
+    required:
+    - code
+    - created_at
+    - id
+    - name
+    - status
+    - updated_at
+    type: object
+  tenant.UpdateRequest:
+    description: Set expected_updated_at to the top-level updated_at from the latest
+      GET /api/v1/tenant. Preserve microsecond precision; example timestamps are illustrative
+      only.
+    properties:
+      expected_updated_at:
+        description: Copy the latest resource timestamp verbatim, preserving all fractional
+          digits and microsecond precision. Never round to milliseconds or use this
+          illustrative example as a real version. Stale versions return 409.
+        example: "2026-01-02T03:04:05.123456Z"
+        format: date-time
+        type: string
+      name:
+        description: Trimmed, nonblank Unicode text; NUL is rejected.
+        maxLength: 200
+        minLength: 1
+        type: string
+    required:
+    - expected_updated_at
+    - name
+    type: object
+  user.CreateRequest:
+    description: Wire model for UserCreateRequest.
+    properties:
+      email:
+        description: Trimmed bare email address. PostgreSQL LOWER supplies case normalization
+          for stored values.
+        format: email
+        maxLength: 255
+        minLength: 1
+        type: string
+      full_name:
+        description: Trimmed, nonblank Unicode text; NUL is rejected.
+        maxLength: 200
+        minLength: 1
+        type: string
+      password:
+        description: 12–72 UTF-8 bytes, not Unicode characters. bcrypt-hashed; never
+          returned.
+        format: password
+        type: string
+        x-max-bytes: "72"
+        x-min-bytes: "12"
+    required:
+    - email
+    - full_name
+    - password
+    type: object
+  user.Membership:
+    description: Wire model for Membership.
+    properties:
+      joined_at:
+        format: date-time
+        type: string
+      status:
+        enum:
+        - active
+        - suspended
+        type: string
+      updated_at:
+        format: date-time
+        type: string
+      user_id:
+        format: uuid
+        type: string
+    required:
+    - joined_at
+    - status
+    - updated_at
+    - user_id
+    type: object
+  user.MembershipRequest:
+    description: Attach a known non-deleted identity to the JWT tenant; no global
+      user search or implicit email attachment.
+    properties:
+      user_id:
+        format: uuid
+        type: string
+    required:
+    - user_id
+    type: object
+  user.MembershipStatusRequest:
+    description: Set expected_updated_at to membership.updated_at from the latest
+      GET /api/v1/users/{user_id}; preserve microsecond precision. Activation requires
+      the caller to hold all target assigned permissions, including dormant grants.
+      Removed memberships cannot be changed through this route.
+    properties:
+      expected_updated_at:
+        description: Copy the latest resource timestamp verbatim, preserving all fractional
+          digits and microsecond precision. Never round to milliseconds or use this
+          illustrative example as a real version. Stale versions return 409.
+        example: "2026-01-02T03:04:05.123456Z"
+        format: date-time
+        type: string
+      status:
+        enum:
+        - active
+        - suspended
+        type: string
+    required:
+    - expected_updated_at
+    - status
+    type: object
+  user.Page:
+    description: Wire model for UserPage.
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/user.User'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        format: int64
+        type: integer
+    required:
+    - items
+    - page
+    - page_size
+    - total
+    type: object
+  user.UpdateRequest:
+    description: Copy expected_updated_at from the top-level updated_at of the latest
+      GET /api/v1/users/{user_id}, not membership.updated_at. Preserve microsecond
+      precision. At least one non-null change is required. Explicit null pointers
+      act as omitted fields. Shared identities cannot be edited by tenant APIs (409).
+      Password changes additionally require the caller to hold the target's assigned
+      permissions.
+    properties:
+      email:
+        description: Trimmed bare email address. PostgreSQL LOWER supplies case normalization
+          for stored values.
+        format: email
+        maxLength: 255
+        minLength: 1
+        type: string
+        x-nullable: true
+      expected_updated_at:
+        description: Copy the latest resource timestamp verbatim, preserving all fractional
+          digits and microsecond precision. Never round to milliseconds or use this
+          illustrative example as a real version. Stale versions return 409.
+        example: "2026-01-02T03:04:05.123456Z"
+        format: date-time
+        type: string
+      full_name:
+        description: Trimmed, nonblank Unicode text; NUL is rejected.
+        maxLength: 200
+        minLength: 1
+        type: string
+        x-nullable: true
+      password:
+        description: 12–72 UTF-8 bytes, not Unicode characters. bcrypt-hashed; never
+          returned.
+        format: password
+        type: string
+        x-max-bytes: "72"
+        x-min-bytes: "12"
+        x-nullable: true
+    required:
+    - expected_updated_at
+    type: object
+  user.User:
+    description: Wire model for User.
+    properties:
+      created_at:
+        format: date-time
+        type: string
+      email:
+        description: Trimmed bare email address. PostgreSQL LOWER supplies case normalization
+          for stored values.
+        format: email
+        maxLength: 255
+        minLength: 1
+        type: string
+      full_name:
+        type: string
+      id:
+        format: uuid
+        type: string
+      membership:
+        $ref: '#/definitions/user.Membership'
+      updated_at:
+        format: date-time
+        type: string
+    required:
+    - created_at
+    - email
+    - full_name
+    - id
+    - membership
+    - updated_at
+    type: object
+  user.VersionRequest:
+    description: For user deletion copy the top-level updated_at from the latest GET
+      /api/v1/users/{user_id}; do not use membership.updated_at. For membership removal
+      copy membership.updated_at from that GET response. Preserve microsecond precision;
+      example timestamps are illustrative only.
+    properties:
+      expected_updated_at:
+        description: Copy the latest resource timestamp verbatim, preserving all fractional
+          digits and microsecond precision. Never round to milliseconds or use this
+          illustrative example as a real version. Stale versions return 409.
+        example: "2026-01-02T03:04:05.123456Z"
+        format: date-time
+        type: string
+    required:
+    - expected_updated_at
+    type: object
+info:
+  contact: {}
+  description: Source-backed documentation for 30 application operations. Protected
+    operations require Authorize with Bearer <access JWT>. Tenant identity comes only
+    from validated JWT context; client headers, query parameters and request bodies
+    cannot select the authorization tenant. Permissions are evaluated within that
+    tenant; cross-tenant target lookups return 404 after authorization. No public
+    registration, HTTP tenant bootstrap or audit-log query endpoint exists. Management
+    changes and audits commit together; login audits are best effort. Body errors
+    use 400, not 413/415. Database failures normally use sanitized 500; readiness
+    uses 503. Router fallbacks use JSON 404/405. Swagger documentation routes are
+    excluded from this inventory.
+  title: Multi-Tenant User Management API
+  version: 1.0.0
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Requires a non-deleted user, active tenant and active membership.
+        Unknown users, incorrect passwords and inactive accounts share the same 401.
+        Records best-effort login audits.
+      operationId: login
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.TokenPair'
+        "400":
+          description: Invalid JSON, content type, body size, or required credential
+            fields. Application body failures use 400, not 413/415.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: Invalid email/password/tenant combination or inactive account;
+            account existence is not disclosed.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Authenticate in a tenant
+      tags:
+      - Authentication
+      x-identity-state-required: false
+      x-required-permission: null
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: No access JWT required. Does not revoke other sessions or an issued
+        access JWT. Repeating logout with the revoked token returns 401.
+      operationId: logout
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: Invalid JSON, content type, body size, or required credential
+            fields. Application body failures use 400, not 413/415.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: Malformed, revoked or expired refresh credential, or an inactive
+            account.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Revoke the submitted refresh credential
+      tags:
+      - Authentication
+      x-identity-state-required: false
+      x-required-permission: null
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: No access JWT required. Concurrent reuse has one winner; old credential
+        is revoked atomically with replacement. Expired/revoked/inactive-account tokens
+        return 401. A lost successful response cannot be retried using the old credential.
+      operationId: refresh
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.TokenPair'
+        "400":
+          description: Invalid JSON, content type, body size, or required credential
+            fields. Application body failures use 400, not 413/415.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "401":
+          description: Malformed, revoked or expired refresh credential, or an inactive
+            account.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Atomically rotate a refresh credential
+      tags:
+      - Authentication
+      x-identity-state-required: false
+      x-required-permission: null
+  /api/v1/me/permissions:
+    get:
+      description: Any active authenticated member may inspect their own permissions;
+        no catalog grant is required. Inactive identities return 403, and ordinary
+        members usually receive an empty array. Requires active tenant, active non-removed
+        membership and non-deleted actor. No catalog grant required for own permissions.
+      operationId: listMyPermissions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/rbac.Permission'
+            type: array
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List caller's effective permission union
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: null
+  /api/v1/memberships:
+    post:
+      consumes:
+      - application/json
+      description: 'An existing live membership conflicts. Reattaching a removed membership
+        with historical role assignments conflicts instead of restoring old privileges.
+        Old refresh credentials never revive. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: membership:create. Changes and
+        audits commit transactionally.'
+      operationId: addMembership
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.MembershipRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/user.Membership'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Existing non-removed membership, or historical role assignments
+            preventing reattachment of a removed membership. Database constraint,
+            serialization or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Attach an existing identity
+      tags:
+      - Memberships
+      x-identity-state-required: true
+      x-required-permission: membership:create
+  /api/v1/memberships/{user_id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'Set expected_updated_at to membership.updated_at from the latest
+        GET /api/v1/users/{user_id} response. Copy the timestamp verbatim, preserving
+        all fractional digits and microsecond precision; do not round to milliseconds,
+        generate the current time, or use the Swagger example as a real version. A
+        stale version returns 409; GET again before retrying. Retains the membership,
+        role history and refresh-token records; sets removed_at and suspended status,
+        and revokes tenant/user refresh tokens. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: membership:delete. Changes and
+        audits commit transactionally.'
+      operationId: removeMembership
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.VersionRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale membership expected_updated_at. Database constraint,
+            serialization or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Logically remove a membership
+      tags:
+      - Memberships
+      x-identity-state-required: true
+      x-required-permission: membership:delete
+    patch:
+      consumes:
+      - application/json
+      description: 'Set expected_updated_at to membership.updated_at from the latest
+        GET /api/v1/users/{user_id} response. Copy the timestamp verbatim, preserving
+        all fractional digits and microsecond precision; do not round to milliseconds,
+        generate the current time, or use the Swagger example as a real version. A
+        stale version returns 409; GET again before retrying. Requires active tenant,
+        active non-removed membership and non-deleted actor. Permission: membership:update.
+        Changes and audits commit transactionally.'
+      operationId: setMembershipStatus
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.MembershipStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.Membership'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale membership expected_updated_at. Database constraint,
+            serialization or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change membership status
+      tags:
+      - Memberships
+      x-identity-state-required: true
+      x-required-permission: membership:update
+  /api/v1/permissions:
+    get:
+      description: 'Global identifiers, not global authority. Historical unsupported
+        entries may be present; only supported pairs authorize actions. Requires active
+        tenant, active non-removed membership and non-deleted actor. Permission: permission:read.'
+      operationId: listPermissions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/rbac.Permission'
+            type: array
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Read the persisted permission catalog
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: permission:read
+  /api/v1/roles:
+    get:
+      description: 'Only page and page_size query keys are accepted. Ordered by created_at
+        then ID. Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: role:read.'
+      operationId: listRoles
+      parameters:
+      - default: 1
+        description: page
+        in: query
+        maximum: 1000000
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: page_size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rbac.RolePage'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List current tenant roles
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role:read
+    post:
+      consumes:
+      - application/json
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: role:create. Changes and audits commit transactionally.'
+      operationId: createRole
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rbac.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/rbac.Role'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Duplicate role name within the tenant. Database constraint,
+            serialization or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a tenant role
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role:create
+  /api/v1/roles/{role_id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'Set expected_version to the exact version from the latest GET
+        /api/v1/roles/{role_id} response; this is an opaque profile digest, not a
+        timestamp. A stale version returns 409; GET again before retrying. Transactionally
+        removes only this tenant role''s permission links and user assignments, auditing
+        each removal. Global permission identifiers and unrelated roles remain. Requires
+        active tenant, active non-removed membership and non-deleted actor. Permission:
+        role:delete. Changes and audits commit transactionally.'
+      operationId: deleteRole
+      parameters:
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rbac.DeleteRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale expected_version. Database constraint, serialization
+            or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a role and its grant links
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role:delete
+    get:
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: role:read.'
+      operationId: getRole
+      parameters:
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rbac.Role'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a tenant role
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role:read
+    patch:
+      consumes:
+      - application/json
+      description: 'Set expected_version to the exact version from the latest GET
+        /api/v1/roles/{role_id} response; this is an opaque profile digest, not a
+        timestamp. A stale version returns 409; GET again before retrying. Requires
+        active tenant, active non-removed membership and non-deleted actor. Permission:
+        role:update. Changes and audits commit transactionally.'
+      operationId: updateRole
+      parameters:
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rbac.UpdateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rbac.Role'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale expected_version or duplicate role name within the tenant.
+            Database constraint, serialization or deadlock conflict. Reread before
+            retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Replace a role profile
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role:update
+  /api/v1/roles/{role_id}/permissions:
+    delete:
+      consumes:
+      - application/json
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: role_permission:remove. Changes and audits commit transactionally.'
+      operationId: revokePermission
+      parameters:
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rbac.PermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Database constraint, serialization or deadlock conflict. Reread
+            before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a role permission
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role_permission:remove
+    get:
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: role:read.'
+      operationId: listRolePermissions
+      parameters:
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/rbac.Permission'
+            type: array
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List role permission links
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role:read
+    post:
+      consumes:
+      - application/json
+      description: 'Caller must also currently hold the permission being granted;
+        cannot delegate beyond their authority. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: role_permission:assign. Changes
+        and audits commit transactionally.'
+      operationId: assignPermission
+      parameters:
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/rbac.PermissionRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Duplicate role-permission link. Database constraint, serialization
+            or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Grant a permission to a role
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: role_permission:assign
+  /api/v1/tenant:
+    get:
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: tenant:read.'
+      operationId: getTenant
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tenant.Tenant'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get the current tenant
+      tags:
+      - Tenant
+      x-identity-state-required: true
+      x-required-permission: tenant:read
+    patch:
+      consumes:
+      - application/json
+      description: 'Set expected_updated_at to the top-level updated_at from the latest
+        GET /api/v1/tenant response. Copy the timestamp verbatim, preserving all fractional
+        digits and microsecond precision; do not round to milliseconds, generate the
+        current time, or use the Swagger example as a real version. A stale version
+        returns 409; GET again before retrying. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: tenant:update. Changes and audits
+        commit transactionally.'
+      operationId: updateTenant
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/tenant.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tenant.Tenant'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale tenant expected_updated_at. Database constraint, serialization
+            or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update the current tenant name
+      tags:
+      - Tenant
+      x-identity-state-required: true
+      x-required-permission: tenant:update
+  /api/v1/tenant/status:
+    patch:
+      consumes:
+      - application/json
+      description: 'Set expected_updated_at to the top-level updated_at from the latest
+        GET /api/v1/tenant response. Copy the timestamp verbatim, preserving all fractional
+        digits and microsecond precision; do not round to milliseconds, generate the
+        current time, or use the Swagger example as a real version. A stale version
+        returns 409; GET again before retrying. Suspension revokes tenant refresh
+        tokens and blocks all subsequent protected HTTP requests. A suspended tenant
+        cannot reactivate itself through this API. Requires active tenant, active
+        non-removed membership and non-deleted actor. Permission: tenant:status. Changes
+        and audits commit transactionally.'
+      operationId: setTenantStatus
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/tenant.StatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tenant.Tenant'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale tenant expected_updated_at. Database constraint, serialization
+            or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update current tenant status
+      tags:
+      - Tenant
+      x-identity-state-required: true
+      x-required-permission: tenant:status
+  /api/v1/users:
+    get:
+      description: 'Stable ordering by created_at then ID. Excludes soft-deleted users
+        and removed memberships. Only documented query keys are accepted. Requires
+        active tenant, active non-removed membership and non-deleted actor. Permission:
+        user:read.'
+      operationId: listUsers
+      parameters:
+      - default: 1
+        description: page
+        in: query
+        maximum: 1000000
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: page_size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      - description: Trimmed, literal, case-insensitive substring of email/full_name;
+          not a wildcard expression.
+        in: query
+        name: q
+        type: string
+      - description: membership_status
+        enum:
+        - active
+        - suspended
+        in: query
+        name: membership_status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.Page'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List current tenant users
+      tags:
+      - Users
+      x-identity-state-required: true
+      x-required-permission: user:read
+    post:
+      consumes:
+      - application/json
+      description: 'Global email uniqueness includes soft-deleted users. Existing
+        email never overwrites credentials or silently attaches a user. Requires active
+        tenant, active non-removed membership and non-deleted actor. Permission: user:create.
+        Changes and audits commit transactionally.'
+      operationId: createUser
+      parameters:
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.CreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/user.User'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Duplicate email (including an existing soft-deleted user).
+            Database constraint, serialization or deadlock conflict. Reread before
+            retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a user and membership
+      tags:
+      - Users
+      x-identity-state-required: true
+      x-required-permission: user:create
+  /api/v1/users/{user_id}:
+    delete:
+      consumes:
+      - application/json
+      description: 'Set expected_updated_at to the top-level updated_at from the latest
+        GET /api/v1/users/{user_id} response, not membership.updated_at. Copy the
+        timestamp verbatim, preserving all fractional digits and microsecond precision;
+        do not round to milliseconds, generate the current time, or use the Swagger
+        example as a real version. A stale version returns 409; GET again before retrying.
+        Shared identities return 409. Retains user and membership history, marks this
+        membership removed/suspended, and revokes refresh tokens. Does not physically
+        delete the user. Requires active tenant, active non-removed membership and
+        non-deleted actor. Permission: user:delete. Changes and audits commit transactionally.'
+      operationId: deleteUser
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.VersionRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content; soft deletion succeeded; empty response body
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale expected_updated_at or a shared identity with another
+            non-removed tenant membership (including suspended memberships). Database
+            constraint, serialization or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Soft-delete a tenant user
+      tags:
+      - Users
+      x-identity-state-required: true
+      x-required-permission: user:delete
+    get:
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: user:read.'
+      operationId: getUser
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.User'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a tenant member
+      tags:
+      - Users
+      x-identity-state-required: true
+      x-required-permission: user:read
+    patch:
+      consumes:
+      - application/json
+      description: 'Set expected_updated_at to the top-level updated_at from the latest
+        GET /api/v1/users/{user_id} response, not membership.updated_at. Copy the
+        timestamp verbatim, preserving all fractional digits and microsecond precision;
+        do not round to milliseconds, generate the current time, or use the Swagger
+        example as a real version. A stale version returns 409; GET again before retrying.
+        Shared identities with another non-removed membership return 409. Password
+        changes revoke applicable refresh tokens and require the caller to hold the
+        target''s assigned permissions. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: user:update. Changes and audits
+        commit transactionally.'
+      operationId: updateUser
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: One JSON object; unknown fields/extra JSON values rejected; max
+          16 KiB
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/user.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/user.User'
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Stale expected_updated_at, duplicate email, or a shared identity
+            with another non-removed tenant membership. Database constraint, serialization
+            or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a tenant member profile
+      tags:
+      - Users
+      x-identity-state-required: true
+      x-required-permission: user:update
+  /api/v1/users/{user_id}/permissions:
+    get:
+      description: 'Distinct union of supported permissions across roles; suspended
+        target memberships have an empty set. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: user_permission:read.'
+      operationId: listEffectivePermissions
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/rbac.Permission'
+            type: array
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List effective tenant permission union
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: user_permission:read
+  /api/v1/users/{user_id}/roles:
+    get:
+      description: 'May include suspended members'' dormant assignments; removed memberships
+        and deleted users are not targetable. Requires active tenant, active non-removed
+        membership and non-deleted actor. Permission: user_permission:read.'
+      operationId: listUserRoles
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/rbac.Role'
+            type: array
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List a tenant member's assigned roles
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: user_permission:read
+  /api/v1/users/{user_id}/roles/{role_id}:
+    delete:
+      description: 'Requires active tenant, active non-removed membership and non-deleted
+        actor. Permission: user_role:remove. Changes and audits commit transactionally.'
+      operationId: revokeUserRole
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Database constraint, serialization or deadlock conflict. Reread
+            before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a user role assignment
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: user_role:remove
+    put:
+      description: 'No body. Duplicate assignment returns 409. Caller must hold every
+        supported permission already granted by that role. Requires active tenant,
+        active non-removed membership and non-deleted actor. Permission: user_role:assign.
+        Changes and audits commit transactionally.'
+      operationId: assignUserRole
+      parameters:
+      - description: user_id
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: role_id
+        in: path
+        name: role_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No content
+        "400":
+          description: 'Invalid request: JSON/content type/body size, fields, UUID,
+            pagination, supported permission pair, or required version. Application
+            body failures use 400, not 413/415.'
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Missing/invalid bearer JWT, or invalid login/refresh credentials.
+            Authentication failures do not disclose account existence.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Valid JWT but insufficient permission, inactive tenant/membership,
+            removed membership, deleted actor, or forbidden delegation/credential
+            change. Authorization precedes target lookup and body validation.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Resource is absent in the current JWT tenant, soft-deleted/removed,
+            or the requested assignment/link is absent. Cross-tenant target resources
+            are indistinguishable from missing resources.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Duplicate user-role assignment. Database constraint, serialization
+            or deadlock conflict. Reread before retrying.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Assign a tenant role
+      tags:
+      - RBAC
+      x-identity-state-required: true
+      x-required-permission: user_role:assign
+  /health:
+    get:
+      description: Independent of database state after successful application startup.
+      operationId: getHealth
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.HealthResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Application liveness
+      tags:
+      - Operations
+      x-identity-state-required: false
+      x-required-permission: null
+  /ready:
+    get:
+      description: Bounded pool ping. Startup itself fails if the database is initially
+        unavailable.
+      operationId: getReady
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.ReadyResponse'
+        "500":
+          description: Sanitized internal/database failure; no driver details or credentials
+            returned.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+        "503":
+          description: Readiness database ping failed or timed out.
+          schema:
+            $ref: '#/definitions/middleware.ErrorResponse'
+      summary: Database readiness
+      tags:
+      - Operations
+      x-identity-state-required: false
+      x-required-permission: null
+securityDefinitions:
+  BearerAuth:
+    description: Click Authorize and enter Bearer <access JWT>, including the Bearer
+      prefix and space. The validated JWT selects the tenant; client-supplied tenant
+      IDs are never trusted. Roles/permissions are checked in PostgreSQL, not trusted
+      from JWT claims. Never enter a refresh token here.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+x-supported-permissions:
+- tenant:read
+- tenant:update
+- tenant:status
+- user:create
+- user:read
+- user:update
+- user:delete
+- membership:create
+- membership:update
+- membership:delete
+- role:create
+- role:read
+- role:update
+- role:delete
+- role_permission:assign
+- role_permission:remove
+- user_role:assign
+- user_role:remove
+- permission:read
+- user_permission:read
