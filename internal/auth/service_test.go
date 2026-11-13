@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -14,26 +15,36 @@ import (
 )
 
 type memoryRepository struct {
-	mu          sync.Mutex
-	credentials Credentials
-	findErr     error
-	createErr   error
-	sessions    map[string]bool
-	actions     []string
-	lastEmail   string
+	mu                 sync.Mutex
+	credentials        Credentials
+	findErr            error
+	createErr          error
+	auditErr           error
+	failureAuditErr    error
+	successIdentities  []Identity
+	failureContextErr  error
+	failureHasDeadline bool
+	sessions           map[string]bool
+	actions            []string
+	lastEmail          string
 }
 
 func (r *memoryRepository) FindCredentials(_ context.Context, email, _ string) (Credentials, error) {
 	r.lastEmail = email
 	return r.credentials, r.findErr
 }
-func (r *memoryRepository) CreateSession(_ context.Context, _ Identity, s RefreshSession) error {
+func (r *memoryRepository) CreateSession(_ context.Context, id Identity, s RefreshSession) error {
 	if r.createErr != nil {
 		return r.createErr
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.auditErr != nil {
+		return r.auditErr
+	}
 	r.sessions[s.Hash] = true
+	r.actions = append(r.actions, "auth.login.success")
+	r.successIdentities = append(r.successIdentities, id)
 	return nil
 }
 func (r *memoryRepository) Rotate(_ context.Context, hash string, issue func(Identity) (RefreshSession, error)) error {
@@ -59,8 +70,15 @@ func (r *memoryRepository) Revoke(_ context.Context, hash string) error {
 	r.sessions[hash] = false
 	return nil
 }
-func (r *memoryRepository) Audit(_ context.Context, action string, _ *Identity) error {
-	r.actions = append(r.actions, action)
+func (r *memoryRepository) AuditLoginFailure(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.failureContextErr = ctx.Err()
+	_, r.failureHasDeadline = ctx.Deadline()
+	if r.failureAuditErr != nil {
+		return r.failureAuditErr
+	}
+	r.actions = append(r.actions, "auth.login.failure")
 	return nil
 }
 
@@ -105,6 +123,9 @@ func TestLoginAndAudit(t *testing.T) {
 	if len(r.actions) != 1 || r.actions[0] != "auth.login.success" {
 		t.Fatal("missing success audit")
 	}
+	if len(r.successIdentities) != 1 || r.successIdentities[0] != testIdentity {
+		t.Fatal("success audit must use the verified tenant and user identity")
+	}
 	_, err = s.Login(context.Background(), LoginRequest{Password: "wrong"})
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatal("wrong password accepted")
@@ -118,6 +139,53 @@ func TestLoginAndAudit(t *testing.T) {
 	r.createErr = ErrUnauthorized
 	if _, err := s.Login(context.Background(), LoginRequest{Password: "test-password"}); !errors.Is(err, ErrUnauthorized) {
 		t.Fatal("user invalidated before issuance must fail")
+	}
+}
+
+func TestLoginPersistenceFailureReturnsNoCredentials(t *testing.T) {
+	for _, stage := range []string{"session/commit", "audit"} {
+		t.Run(stage, func(t *testing.T) {
+			s, r := testService(t)
+			failure := errors.New("required persistence failed")
+			if stage == "audit" {
+				r.auditErr = failure
+			} else {
+				r.createErr = failure
+			}
+			pair, err := s.Login(context.Background(), LoginRequest{Password: "test-password"})
+			if !errors.Is(err, failure) || pair != (TokenPair{}) {
+				t.Fatal("failed persistence returned usable credentials")
+			}
+			if len(r.sessions) != 0 || len(r.actions) != 0 {
+				t.Fatal("failed persistence left a session or success audit")
+			}
+		})
+	}
+}
+
+func TestFailedLoginAuditRemainsBestEffort(t *testing.T) {
+	s, r := testService(t)
+	var logs bytes.Buffer
+	s.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	r.failureAuditErr = errors.New("secret-driver-details")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for _, unknown := range []bool{false, true} {
+		if unknown {
+			r.findErr = ErrUnauthorized
+		}
+		pair, err := s.Login(ctx, LoginRequest{Email: "not-logged@example.test", Password: "wrong-not-logged"})
+		if !errors.Is(err, ErrUnauthorized) || pair != (TokenPair{}) || len(r.sessions) != 0 || len(r.successIdentities) != 0 {
+			t.Fatal("failure audit outage changed invalid-credential behavior")
+		}
+	}
+	if r.failureContextErr != nil || !r.failureHasDeadline {
+		t.Fatal("failure audit must be bounded and independent of request cancellation")
+	}
+	for _, value := range []string{"secret-driver-details", "not-logged@example.test", "wrong-not-logged"} {
+		if strings.Contains(logs.String(), value) {
+			t.Fatal("failure audit logging disclosed sensitive input")
+		}
 	}
 }
 

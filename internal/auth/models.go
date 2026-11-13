@@ -65,10 +65,12 @@ type RefreshSession struct {
 
 type Repository interface {
 	FindCredentials(context.Context, string, string) (Credentials, error)
+	// CreateSession atomically persists a verified login's refresh session and
+	// success audit (tenant, authenticated actor, user target and DB timestamp).
 	CreateSession(context.Context, Identity, RefreshSession) error
 	// Rotate locks and validates the old session, calls issue, then atomically
 	// revokes the old token and inserts its replacement. Callback failure rolls back.
 	Rotate(context.Context, string, func(Identity) (RefreshSession, error)) error
 	Revoke(context.Context, string) error
-	Audit(context.Context, string, *Identity) error
+	AuditLoginFailure(context.Context) error
 }

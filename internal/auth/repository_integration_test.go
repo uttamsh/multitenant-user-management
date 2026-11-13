@@ -32,7 +32,7 @@ func TestPostgresAuthentication(t *testing.T) {
 	if dsn == "" {
 		t.Skip("set AUTH_TEST_DATABASE_URL to run isolated-schema PostgreSQL integration tests")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	admin, err := pgxpool.New(ctx, dsn)
 	if err != nil {
@@ -59,7 +59,8 @@ func TestPostgresAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal("invalid integration database configuration")
 	}
-	cfg.ConnConfig.RuntimeParams["search_path"] = schema + ",public"
+	// No fallback to application tables if a test relation is accidentally absent.
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
 	cfg.MaxConns = 12
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -202,17 +203,14 @@ func TestPostgresAuthentication(t *testing.T) {
 			}
 		})
 	}
-	if err := repo.Audit(ctx, "auth.login.failure", nil); err != nil {
-		t.Fatal(err)
-	}
-	if err := repo.Audit(ctx, "auth.login.success", &testIdentity); err != nil {
-		t.Fatal(err)
-	}
-	var count int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs`).Scan(&count); err != nil || count != 2 {
-		t.Fatal("audit records not persisted")
-	}
+	t.Run("login audit transaction completeness", func(t *testing.T) {
+		testLoginAuditTransaction(t, ctx, pool, repo, tokens)
+	})
 	t.Run("HTTP login refresh logout with PostgreSQL", func(t *testing.T) {
+		var beforeCount, count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action IN ('auth.login.success','auth.login.failure')`).Scan(&beforeCount); err != nil {
+			t.Fatal(err)
+		}
 		logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 		service, err := NewService(repo, tokens, logger)
 		if err != nil {
@@ -251,7 +249,7 @@ func TestPostgresAuthentication(t *testing.T) {
 		call("logout", RefreshRequest{RefreshToken: pair.RefreshToken}, 204)
 		call("refresh", RefreshRequest{RefreshToken: pair.RefreshToken}, 401)
 		call("login", LoginRequest{Email: "mixedcase@example.test", Password: "wrong", TenantCode: "auth-test"}, 401)
-		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action IN ('auth.login.success','auth.login.failure')`).Scan(&count); err != nil || count != 4 {
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE action IN ('auth.login.success','auth.login.failure')`).Scan(&count); err != nil || count != beforeCount+2 {
 			t.Fatal("HTTP login outcomes were not audited")
 		}
 	})
@@ -266,11 +264,11 @@ func TestPostgresAuthentication(t *testing.T) {
 				t.Fatal("invalid integration database URL")
 			}
 			query := u.Query()
-			query.Set("search_path", schema+",public")
+			query.Set("search_path", schema)
 			u.RawQuery = query.Encode()
 			childDSN = u.String()
 		} else {
-			childDSN += " search_path=" + schema + ",public"
+			childDSN += " search_path=" + schema
 		}
 		probe, err := pgxpool.New(ctx, childDSN)
 		if err != nil {

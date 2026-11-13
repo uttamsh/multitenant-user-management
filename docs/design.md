@@ -185,10 +185,27 @@ uses 503. No automatic deadlock/serialization retry is implemented.
 
 Management mutations and audits commit together; an audit failure rolls back the
 change. Audits record action, actor/tenant/target UUIDs and related grant UUIDs,
-not passwords, tokens, profile bodies or submitted email addresses. Login outcomes
-are best effort in a separate bounded context that survives client cancellation;
-audit failure emits a fixed warning. Failed/anonymous login has no authenticated
-actor. Failed authorization attempts and refresh/logout are not audited as a
+not passwords, tokens, profile bodies or submitted email addresses. Successful
+login now uses the existing refresh-session transaction: after password verification,
+validity rows are locked, the refresh hash and success audit are inserted, and both
+commit before the service returns credentials. `auth.login.success` records the
+verified tenant, actor=user, target_type=user, target_id=user and the existing
+PostgreSQL `created_at DEFAULT NOW()` timestamp. Required audit/session errors
+roll back; commit errors return an empty token pair and sanitized HTTP 500.
+Generated tokens remain local until persistence succeeds and are never logged.
+No audit schema migration, revision change, JWT-format change or historical-data
+backfill is needed. Success logging no longer uses the detached best-effort path.
+
+Invalid credential/account checks reaching the service retain a separate,
+best-effort failure insert with NULL tenant/actor/target, empty metadata and a DB
+timestamp. The failure-only repository method takes no submitted identity or action
+parameters. It runs in a bounded context that survives request cancellation; failure
+emits a fixed warning and does not change the uniform 401. Malformed requests rejected
+by the handler are not newly audited. Unauthenticated identities are never invented.
+A network error during COMMIT may leave its outcome unknown; the service returns
+no credentials on error, while database atomicity still keeps the session and success
+event together. This does not add retry/idempotency or a claim that client receipt
+is known. Existing login audit rows remain unchanged. Failed authorization attempts and refresh/logout are not audited as a
 complete security-event stream. There is no audit search/export endpoint or
 tamper-evident/external audit storage.
 

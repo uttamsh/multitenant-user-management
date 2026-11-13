@@ -274,8 +274,23 @@ resource lookups. Role administration endpoints are documented under Phase 4.
 Errors retain the shared `{"error":{"code":"unauthorized","message":"Invalid or missing authentication"}}`
 envelope: malformed requests return 400, invalid credentials return 401, forbidden
 actions return 403, and internal failures return a sanitized 500. Authentication
-responses set `Cache-Control: no-store`. Login audit writes are best effort and
-bounded; a failed audit emits a fixed warning without request or driver details.
+responses set `Cache-Control: no-store`.
+
+Successful login atomically commits its refresh session and one
+`auth.login.success` audit. The event records the verified tenant, authenticated
+user as both `actor_id` and `target_id`, `target_type=user`, and PostgreSQL's
+`created_at` timestamp. Required audit/session/commit errors return a sanitized
+500 with no credentials; no partial session or success audit commits on rollback.
+No password, email, JWT, refresh token or credential hash is added to audit data.
+
+Failed credential checks reaching the authentication service retain best-effort,
+bounded `auth.login.failure` audits: actor, tenant and target fields stay NULL,
+with empty metadata and a database timestamp. Unknown accounts, wrong passwords
+and invalid tenant/account combinations keep the same 401 response even if the
+failure audit cannot persist; only a fixed warning is logged. Malformed requests
+rejected before the service retain their existing 400 behavior without login audits.
+Refresh rotation and logout audit behavior are unchanged. Existing historical
+login rows are not backfilled. See [Phase 8 validation](docs/phase8-validation.md).
 
 ### Development provisioning and curl examples
 

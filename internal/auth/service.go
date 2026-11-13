@@ -36,13 +36,13 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (TokenPair, error
 	if err != nil {
 		_ = VerifyPassword(s.dummyHash, req.Password)
 		if errors.Is(err, ErrUnauthorized) {
-			s.audit(ctx, "auth.login.failure", nil)
+			s.auditFailure(ctx)
 		}
 		return TokenPair{}, err
 	}
 	if !VerifyPassword(credentials.PasswordHash, req.Password) {
 		// The submitted identity has not authenticated and is not an audit actor.
-		s.audit(ctx, "auth.login.failure", nil)
+		s.auditFailure(ctx)
 		return TokenPair{}, ErrUnauthorized
 	}
 	pair, session, err := s.tokens.Issue(credentials.Identity)
@@ -51,11 +51,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (TokenPair, error
 	}
 	if err = s.repo.CreateSession(ctx, credentials.Identity, session); err != nil {
 		if errors.Is(err, ErrUnauthorized) {
-			s.audit(ctx, "auth.login.failure", nil)
+			s.auditFailure(ctx)
 		}
 		return TokenPair{}, err
 	}
-	s.audit(ctx, "auth.login.success", &credentials.Identity)
+	// CreateSession committed both the session and required success audit. Never
+	// return locally generated credentials after a persistence/commit failure.
 	return pair, nil
 }
 
@@ -83,12 +84,12 @@ func (s *Service) Logout(ctx context.Context, raw string) error {
 	return s.repo.Revoke(ctx, HashRefresh(raw))
 }
 
-func (s *Service) audit(ctx context.Context, action string, id *Identity) {
+func (s *Service) auditFailure(ctx context.Context) {
 	// A disconnected client should not suppress an audit record. This remains
 	// best effort and bounded, and carries no submitted credentials or email.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
-	if err := s.repo.Audit(ctx, action, id); err != nil {
-		s.logger.Warn("authentication audit write failed", "action", action)
+	if err := s.repo.AuditLoginFailure(ctx); err != nil {
+		s.logger.Warn("authentication audit write failed", "action", "auth.login.failure")
 	}
 }

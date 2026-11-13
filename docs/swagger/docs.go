@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/api/v1/auth/login": {
             "post": {
-                "description": "Requires a non-deleted user, active tenant and active membership. Unknown users, incorrect passwords and inactive accounts share the same 401. Records best-effort login audits.",
+                "description": "Requires a non-deleted user, active tenant and active membership. Unknown users, incorrect passwords and inactive accounts share the same 401. The refresh session and success audit (verified tenant, actor=user, target=user, DB timestamp) commit atomically before credentials are returned. Required persistence failures return sanitized 500 without tokens. Invalid-credential failure audits remain anonymous and best effort.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2718,7 +2718,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{},
 	Title:            "Multi-Tenant User Management API",
-	Description:      "Source-backed documentation for 30 application operations. Protected operations require Authorize with Bearer <access JWT>. Tenant identity comes only from validated JWT context; client headers, query parameters and request bodies cannot select the authorization tenant. Permissions are evaluated within that tenant; cross-tenant target lookups return 404 after authorization. No public registration, HTTP tenant bootstrap or audit-log query endpoint exists. Management changes and audits commit together; login audits are best effort. Body errors use 400, not 413/415. Database failures normally use sanitized 500; readiness uses 503. Router fallbacks use JSON 404/405. Swagger documentation routes are excluded from this inventory.",
+	Description:      "Source-backed documentation for 30 application operations. Protected operations require Authorize with Bearer <access JWT>. Tenant identity comes only from validated JWT context; client headers, query parameters and request bodies cannot select the authorization tenant. Permissions are evaluated within that tenant; cross-tenant target lookups return 404 after authorization. No public registration, HTTP tenant bootstrap or audit-log query endpoint exists. Management changes and audits commit together; successful login audits commit atomically with refresh sessions; invalid-credential failure audits remain anonymous and best effort. Body errors use 400, not 413/415. Database failures normally use sanitized 500; readiness uses 503. Router fallbacks use JSON 404/405. Swagger documentation routes are excluded from this inventory.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

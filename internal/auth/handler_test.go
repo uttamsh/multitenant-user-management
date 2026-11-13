@@ -121,6 +121,13 @@ func TestAuthHandlers(t *testing.T) {
 	if w := call("login", `{"email":"a@example.test","password":"p","tenant_code":"dev"}`); w.Code != 500 || strings.Contains(w.Body.String(), "secret") {
 		t.Fatal("internal error response leaked details")
 	}
+	repo.findErr = nil
+	repo.auditErr = errors.New("secret-audit-driver-details")
+	before := len(repo.sessions)
+	w = call("login", `{"email":"User@example.test","password":"test-password","tenant_code":"dev"}`)
+	if w.Code != 500 || strings.Contains(w.Body.String(), "secret") || strings.Contains(w.Body.String(), "access_token") || strings.Contains(w.Body.String(), "refresh_token") || len(repo.sessions) != before {
+		t.Fatal("required audit failure must return sanitized 500 without credentials or session")
+	}
 	if strings.Contains(logs.String(), "secret") || strings.Contains(logs.String(), "test-password") {
 		t.Fatal("logs leaked credentials")
 	}

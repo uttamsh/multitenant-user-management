@@ -61,7 +61,7 @@ func decode(c *gin.Context, target any) bool {
 
 // login serves POST /api/v1/auth/login.
 // @Summary Authenticate in a tenant
-// @Description Requires a non-deleted user, active tenant and active membership. Unknown users, incorrect passwords and inactive accounts share the same 401. Records best-effort login audits.
+// @Description Requires a non-deleted user, active tenant and active membership. Unknown users, incorrect passwords and inactive accounts share the same 401. The refresh session and success audit (verified tenant, actor=user, target=user, DB timestamp) commit atomically before credentials are returned. Required persistence failures return sanitized 500 without tokens. Invalid-credential failure audits remain anonymous and best effort.
 // @ID login
 // @Tags Authentication
 // @Produce json

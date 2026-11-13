@@ -24,6 +24,8 @@ func (r *PostgresRepository) FindCredentials(ctx context.Context, email, tenantC
 	return c, repositoryError(err)
 }
 
+// CreateSession commits a fresh login session and its required success audit
+// together. Call only after verifying the password; rotation uses insertSession.
 func (r *PostgresRepository) CreateSession(ctx context.Context, id Identity, session RefreshSession) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -38,6 +40,11 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, id Identity, ses
 		return repositoryError(err)
 	}
 	if err := insertSession(ctx, tx, id, session); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs
+ (tenant_id, actor_id, action, target_type, target_id)
+ VALUES ($1, $2, 'auth.login.success', 'user', $2)`, id.TenantID, id.UserID); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -98,12 +105,10 @@ func (r *PostgresRepository) Revoke(ctx context.Context, hash string) error {
 	return nil
 }
 
-func (r *PostgresRepository) Audit(ctx context.Context, action string, id *Identity) error {
-	var userID, tenantID any
-	if id != nil {
-		userID, tenantID = id.UserID, id.TenantID
-	}
-	_, err := r.pool.Exec(ctx, `INSERT INTO audit_logs (action, actor_id, tenant_id) VALUES ($1, $2, $3)`, action, userID, tenantID)
+// AuditLoginFailure cannot assert identity from unverified submitted credentials.
+// All identity/target fields remain NULL, and metadata contains no request data.
+func (r *PostgresRepository) AuditLoginFailure(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, `INSERT INTO audit_logs (action) VALUES ('auth.login.failure')`)
 	return err
 }
 
